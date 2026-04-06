@@ -1,0 +1,125 @@
+tareas:
+  backup_origen:
+    intervalo: 43200
+    timeout_ollama: 400
+    timeout_script: 200
+    max_reintentos: 3
+    prompt:
+    - Sincroniza la carpeta C:\Proba_Agent_IA\Origen con C:\Proba_Agent_IA\Backup
+      usando robocopy en modo espejo (MIR). El destino debe quedar identico al origen,
+      incluyendo borrar lo que sobre.
+    - Guarda el log de robocopy en el origen como robocopy.log, sin acumular. Excluye
+      ese archivo del proceso de copia.
+    - Los codigos de salida 0 al 7 son exito. El 8 o mayor es error real.
+    - Muestra el contenido del log al final, leyendo el archivo linea a linea con
+      encoding OEM.
+    prompt_verificador:
+    - Es normal que robocopy.log aparezca en la columna Extras del resumen, significa
+      que existe en el destino pero no en el origen, que es el comportamiento correcto.
+      No lo trates como un error.
+  monitor_sistema:
+    intervalo: 60
+    timeout_ollama: 250
+    timeout_script: 250
+    max_reintentos: 3
+    prompt:
+    - Usa psutil.cpu_percent(interval=1) para obtener el porcentaje de uso de CPU.
+    - Usa psutil.virtual_memory() para obtener RAM total y disponible en GB.
+    - Muestra cada metrica en una linea con formato "Nombre; valor unidad".
+  listar_directorio_NAS:
+    intervalo: 86400
+    timeout_ollama: 300
+    timeout_script: 200
+    max_reintentos: 3
+    prompt:
+    - Usa subprocess.run con el comando ["ssh", "-i", "<ruta_clave>", "-o", "StrictHostKeyChecking=no",
+      "jordi@192.168.1.196", "ls -1 /etc/ix2panel/"] donde <ruta_clave> es os.path.expanduser("~/.ssh/ix2panel_key").
+    - Es obligatorio incluir "-o", "StrictHostKeyChecking=no" como argumentos separados
+      en la lista.
+    - Comprueba result.returncode; si es distinto de 0, imprime el error y sys.exit(1).
+    - Si la salida esta vacia, imprime "Error; salida vacia" y sys.exit(1).
+    - Muestra la cabecera con la ruta del directorio y luego el listado, uno por linea.
+  top_procesos:
+    intervalo: 300
+    timeout_ollama: 300
+    timeout_script: 200
+    max_reintentos: 3
+    prompt:
+    - Quiero saber que programas estan consumiendo mas recursos en mi PC ahora mismo.
+    - 'Muestrame los 5 procesos que mas CPU usan.(Nombre proceso: y caunta CPU usan
+      %)'
+    - 'Muestrame los 5 procesos que mas RAM usan.(Nombre proceso: y cuanta RAM usan
+      %)'
+    - Si un proceso individual usa mas del 20% de CPU, marcalo con AVISO en la misma
+      linea.
+    - Si un proceso individual usa mas de 500MB de RAM, marcalo con AVISO en la misma
+      linea.
+    - Para medir CPU por proceso llama p.cpu_percent() una vez en todos los procesos
+      para inicializar, luego time.sleep(1), luego llama p.cpu_percent() de nuevo
+      para obtener el valor real. Nunca uses el valor de la primera llamada, siempre
+      da 0.0.
+    prompt_verificador:
+    - Verifica que hay procesos de CPU y memoria y no dan 0
+  resumen_diario:
+    intervalo: 86400
+    timeout_ollama: 300
+    timeout_script: 200
+    max_reintentos: 3
+    prompt:
+    - Quiero un resumen del estado de mi ordenador para leerlo por la manana y saber
+      si todo va bien.
+    - Dime cuanto espacio libre hay en el disco C y en la carpeta de red \\192.168.1.196\Data1
+      (no uses letra de unidad, usa la ruta UNC directamente).
+    - Dime cuanta RAM esta usando el sistema ahora mismo y cuanta queda libre.
+    - Dime cuantos dias lleva encendido el ordenador sin reiniciar.
+    - Dime si hay algun programa que este consumiendo mas de 1GB de RAM y cual es.
+    - Al final pon una linea que diga si todo parece estar bien o si hay algo que
+      revisar.
+  directorios_mas_grandes:
+    intervalo: 600
+    timeout_script: 500
+    timeout_ollama: 400
+    max_reintentos: 1
+    prompt:
+    - Quiero saber cuales son las carpetas que mas espacio ocupan en mi disco C.
+    - Dame una lista de las 10 carpetas (incluyendo subcarpetas, profundidad de 3)
+      que mas espacio ocupan, con su ruta completa y el espacio que ocupan en GB.
+    - Ordenalas de mayor a menor. Si hay alguna carpeta que ocupe mas de 100GB, marcalo
+      con un aviso.
+    prompt_verificador:
+    - No acepto carpetas de 0.0Gb
+  busqueda_web:
+    intervalo: 300
+    timeout_script: 200
+    timeout_ollama: 300
+    max_reintentos: 3
+    prompt:
+    - genera una consulta de busqueda corta (max 10 palabras).'
+    - realiza la busqueda usando DuckDuckGo (https://duckduckgo.com/html/).'
+    - valida que el contenido HTML no sea vacio.'
+    - busca una fecha cercana a palabras clave relevantes (ej, Artemis,NASA, mision).'
+    - valida que la fecha este en una frase que contenga informacion del evento.'
+    - si hay multiples fechas, elige la mas relevante al contexto.'
+  modelo_monitor:
+    intervalo: 3500
+    timeout_ollama: 300
+    timeout_script: 200
+    max_reintentos: 3
+    prompt:
+    - dime cuantos monitores tiene este pc
+  Crear_Archivo:
+    intervalo: 60
+    timeout_ollama: 300
+    timeout_script: 120
+    max_reintentos: 3
+    prompt:
+    - Si no existe crea una carpeta desde donde operas llamada Crear_Archiu.
+    - Dentro de dicha carpeta crea un archivo llamado Historial.txt.
+    - Dentro del archivo escribe, los diez mandamientos.
+    - En el caso de que el archivo ya exista con los datos, no hagas nada.
+    - Y si todo ha ido bien, devuelve archivo Historial.txt creado con la fecha de
+      creacion.
+    prompt_verificador:
+    - Comprueba que existe/creado el directorio.
+    - Comprueba que existe dentro de la carpeta el archivo.
+    - Comprueba que dentro del archivo estan escritos los 10 mandamientos.

@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Estado en tiempo de ejecucion
+state/
+
+# Logs
+logs/
+
+# Scripts generados por el modelo
+scripts_cache/
+
+# Credenciales
+config/config.yaml

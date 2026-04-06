@@ -1,0 +1,24 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+    
+        {
+            "name": "GUI",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/gui.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Agente",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/agente.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

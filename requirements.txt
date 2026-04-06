@@ -1,0 +1,6 @@
+pyyaml
+requests
+psutil
+customtkinter
+pygments
+pillow
