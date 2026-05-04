@@ -1,6 +1,7 @@
+# powerbot:tareas
 tareas:
 
-  monitor_sistema:
+  monitor_sistema_Ejemplo:
     intervalo: 120
     timeout_ollama: 250
     timeout_script: 60
@@ -10,7 +11,7 @@ tareas:
       - Usa psutil.virtual_memory() para obtener RAM total y disponible en GB.
       - Muestra cada metrica en una linea con formato "Nombre; valor unidad".
 
-  espacio_disco:
+  espacio_disco_Ejemplo:
     intervalo: 300
     timeout_ollama: 250
     timeout_script: 60

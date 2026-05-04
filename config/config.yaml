@@ -1,3 +1,4 @@
+# powerbot:config
 # Copia este archivo como config.yaml y rellena los valores.
 # Los modelos gemini-* usan la API de Google (requieren api_key).
 # El resto de modelos usan Ollama local (http://localhost:11434).

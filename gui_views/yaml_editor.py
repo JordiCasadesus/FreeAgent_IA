@@ -43,10 +43,14 @@ _C = {
 
 class YamlEditorView(ctk.CTkFrame):
 
-    def __init__(self, parent, app, path: str = None):
+    MARKER_CONFIG = "# powerbot:config"
+    MARKER_TAREAS = "# powerbot:tareas"
+
+    def __init__(self, parent, app, path: str = None, tipo: str = "tareas"):
         super().__init__(parent, fg_color="transparent")
         self.app              = app
         self._path            = path or app.TAREAS_PATH
+        self._tipo            = tipo   # "config" o "tareas"
         self._data: dict      = {}
         self._current_section = None   # str key, ej. "config_global" o "tarea:backup"
         self._widget_refs     = {}     # {key: ("entry"|"checkbox"|"textbox", widget)}
@@ -66,7 +70,7 @@ class YamlEditorView(ctk.CTkFrame):
     def _cargar_modelos_gemini(self) -> list[str]:
         import requests as _req
         api_key = self._data.get("api_key", "")
-        if not api_key:
+        if not api_key or api_key.startswith("TU_") or " " in api_key:
             return []
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
@@ -143,7 +147,7 @@ class YamlEditorView(ctk.CTkFrame):
     # =========================================================================
 
     def _es_config(self) -> bool:
-        return os.path.basename(self._path) == "config.yaml"
+        return self._tipo == "config"
 
     def _rebuild_nav(self):
         for w in self._nav.winfo_children():
@@ -369,14 +373,14 @@ class YamlEditorView(ctk.CTkFrame):
         ctk.CTkLabel(box_g, text="modelo:", anchor="w",
                      font=ctk.CTkFont(size=11), text_color="#aaa").grid(
             row=1, column=0, sticky="w", padx=10)
-        cb_g_m = ctk.CTkComboBox(box_g, values=gemini or ["(sin api_key)"])
+        cb_g_m = ctk.CTkComboBox(box_g, values=gemini or [""])
         cb_g_m.set(val_m if _es_google(val_m) else "")
         cb_g_m.grid(row=2, column=0, sticky="ew", padx=10, pady=(2, 6))
 
         ctk.CTkLabel(box_g, text="fallback:", anchor="w",
                      font=ctk.CTkFont(size=11), text_color="#aaa").grid(
             row=3, column=0, sticky="w", padx=10)
-        cb_g_fb = ctk.CTkComboBox(box_g, values=gemini or ["(sin api_key)"])
+        cb_g_fb = ctk.CTkComboBox(box_g, values=gemini or [""])
         cb_g_fb.set(val_fb if _es_google(val_fb) else "")
         cb_g_fb.grid(row=4, column=0, sticky="ew", padx=10, pady=(2, 6))
 
@@ -394,9 +398,9 @@ class YamlEditorView(ctk.CTkFrame):
         def _on_ol_fb(v):
             if v and v != "(sin modelos)": var_fb.set(v); cb_g_fb.set("")
         def _on_g_m(v):
-            if v and v != "(sin api_key)": var_m.set(v);  cb_ol_m.set("")
+            if v: var_m.set(v);  cb_ol_m.set("")
         def _on_g_fb(v):
-            if v and v != "(sin api_key)": var_fb.set(v); cb_ol_fb.set("")
+            if v: var_fb.set(v); cb_ol_fb.set("")
 
         cb_ol_m.configure(command=_on_ol_m)
         cb_ol_fb.configure(command=_on_ol_fb)
@@ -788,7 +792,45 @@ class YamlEditorView(ctk.CTkFrame):
     # Carga / guardado
     # =========================================================================
 
+    def _marker(self) -> str:
+        return self.MARKER_CONFIG if self._es_config() else self.MARKER_TAREAS
+
+    def _verificar_marcador(self, path: str) -> bool:
+        """Devuelve True si el fichero es compatible con esta vista (o no tiene marcador)."""
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                primera = fh.readline().strip()
+            if not primera.startswith("# powerbot:"):
+                return True   # sin marcador: aceptar sin queja
+            return primera == self._marker()
+        except Exception:
+            return True
+
     def cargar_archivo(self, path: str):
+        if not self._verificar_marcador(path):
+            tipo_fichero = "configuracion" if self.MARKER_CONFIG in open(path, encoding="utf-8").readline() else "tareas"
+            tipo_vista   = "configuracion" if self._es_config() else "tareas"
+            win = ctk.CTkToplevel(self)
+            win.title("Tipo de fichero incorrecto")
+            win.geometry("380x150")
+            win.resizable(False, False)
+            win.grab_set()
+            ctk.CTkLabel(win,
+                         text=f"Este fichero es de {tipo_fichero}\npero esta vista es de {tipo_vista}.\n¿Cargar de todas formas?",
+                         justify="center").pack(pady=(20, 12))
+            frame_btn = ctk.CTkFrame(win, fg_color="transparent")
+            frame_btn.pack()
+            continuar = [False]
+            def _si():
+                continuar[0] = True
+                win.destroy()
+            ctk.CTkButton(frame_btn, text="Cargar igualmente", command=_si,
+                          fg_color="#c0392b", hover_color="#96281b", width=160).pack(side="left", padx=8)
+            ctk.CTkButton(frame_btn, text="Cancelar", command=win.destroy, width=100).pack(side="left")
+            self.wait_window(win)
+            if not continuar[0]:
+                return
+
         self._path = path
         try:
             with open(path, "r", encoding="utf-8") as fh:
@@ -811,6 +853,7 @@ class YamlEditorView(ctk.CTkFrame):
             self._lbl_estado.configure(text=f"Error: {e}", text_color="#e05252")
 
     def guardar(self):
+        marker = self._marker()
         if self._raw_mode and self._raw_editor:
             raw = self._raw_editor.get("0.0", "end-1c")
             try:
@@ -819,12 +862,15 @@ class YamlEditorView(ctk.CTkFrame):
                 self._lbl_estado.configure(
                     text=f"YAML invalido: {e}", text_color="#e05252")
                 return
+            if not raw.startswith("# powerbot:"):
+                raw = marker + "\n" + raw
             with open(self._path, "w", encoding="utf-8") as fh:
                 fh.write(raw)
         else:
             self._save_current_section()
             try:
                 with open(self._path, "w", encoding="utf-8") as fh:
+                    fh.write(marker + "\n")
                     yaml.dump(self._data, fh,
                               default_flow_style=False,
                               allow_unicode=True,
@@ -838,6 +884,19 @@ class YamlEditorView(ctk.CTkFrame):
         self._modificado = False
         self._lbl_estado.configure(text="Guardado ✓", text_color="#52c252")
         self.after(2000, lambda: self._lbl_estado.configure(text=""))
+
+    def guardar_como(self):
+        from tkinter import filedialog
+        path = filedialog.asksaveasfilename(
+            initialdir=os.path.dirname(self._path),
+            initialfile=os.path.basename(self._path),
+            defaultextension=".yaml",
+            filetypes=[("YAML", "*.yaml *.yml"), ("Todos", "*.*")],
+        )
+        if path:
+            self._path = path
+            self._lbl_path.configure(text=os.path.basename(path))
+            self.guardar()
 
     def _recargar(self):
         if self._modificado:

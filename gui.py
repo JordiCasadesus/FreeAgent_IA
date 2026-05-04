@@ -84,10 +84,23 @@ class App(ctk.CTk):
 
         m_archivo = tk.Menu(menubar, tearoff=0, bg="#2b2b2b", fg="white",
                             activebackground="#1f6aa5", activeforeground="white")
-        m_archivo.add_command(label="Abrir YAML...",  command=self._abrir_yaml)
-        m_archivo.add_command(label="Guardar YAML",   command=self._guardar_yaml)
+
+        m_cfg = tk.Menu(m_archivo, tearoff=0, bg="#2b2b2b", fg="white",
+                        activebackground="#1f6aa5", activeforeground="white")
+        m_cfg.add_command(label="Abrir...",       command=lambda: self._abrir_yaml("config"))
+        m_cfg.add_command(label="Guardar",        command=lambda: self._guardar_yaml("config"))
+        m_cfg.add_command(label="Guardar como...", command=lambda: self._guardar_yaml_como("config"))
+        m_archivo.add_cascade(label="Configuracion", menu=m_cfg)
+
+        m_tar = tk.Menu(m_archivo, tearoff=0, bg="#2b2b2b", fg="white",
+                        activebackground="#1f6aa5", activeforeground="white")
+        m_tar.add_command(label="Abrir...",       command=lambda: self._abrir_yaml("tareas"))
+        m_tar.add_command(label="Guardar",        command=lambda: self._guardar_yaml("tareas"))
+        m_tar.add_command(label="Guardar como...", command=lambda: self._guardar_yaml_como("tareas"))
+        m_archivo.add_cascade(label="Tareas", menu=m_tar)
+
         m_archivo.add_separator()
-        m_archivo.add_command(label="Salir",          command=self._on_close)
+        m_archivo.add_command(label="Salir",      command=self._on_close)
         menubar.add_cascade(label="Archivo", menu=m_archivo)
 
         m_agente = tk.Menu(menubar, tearoff=0, bg="#2b2b2b", fg="white",
@@ -158,6 +171,18 @@ class App(ctk.CTk):
 
         ctk.CTkFrame(self.sidebar, height=1, fg_color="#3a3a3a").pack(fill="x", padx=12, pady=10)
 
+        # Ficheros activos
+        info = ctk.CTkFrame(self.sidebar, fg_color="#1e1e2e", corner_radius=6)
+        info.pack(fill="x", padx=10, pady=(0, 6))
+        ctk.CTkLabel(info, text="Ficheros activos",
+                     font=ctk.CTkFont(size=10), text_color="#666").pack(anchor="w", padx=8, pady=(6, 2))
+        self._lbl_cfg_file = ctk.CTkLabel(info, text="", font=ctk.CTkFont(size=10),
+                                           text_color="#aaa", anchor="w", wraplength=160)
+        self._lbl_cfg_file.pack(anchor="w", padx=8)
+        self._lbl_tar_file = ctk.CTkLabel(info, text="", font=ctk.CTkFont(size=10),
+                                           text_color="#aaa", anchor="w", wraplength=160)
+        self._lbl_tar_file.pack(anchor="w", padx=8, pady=(0, 6))
+
         # Start / Stop at bottom
         self._btn_stop = ctk.CTkButton(
             self.sidebar, text="■  Detener",
@@ -184,11 +209,12 @@ class App(ctk.CTk):
         self._views: dict[str, Any] = {
             "dashboard": DashboardView(self._content_frame, self),
             "log":       LogViewerView(self._content_frame, self),
-            "config":    YamlEditorView(self._content_frame, self, path=CONFIG_PATH),
-            "tareas":    YamlEditorView(self._content_frame, self, path=TAREAS_PATH),
+            "config":    YamlEditorView(self._content_frame, self, path=CONFIG_PATH, tipo="config"),
+            "tareas":    YamlEditorView(self._content_frame, self, path=TAREAS_PATH, tipo="tareas"),
             "cache":     CacheManagerView(self._content_frame, self),
         }
         self._current_view: Optional[str] = None
+        self.after(100, self._actualizar_labels_ficheros)
 
     def show_view(self, key: str):
         if self._current_view:
@@ -240,19 +266,39 @@ class App(ctk.CTk):
     # Menu handlers
     # =========================================================================
 
-    def _abrir_yaml(self):
+    def _actualizar_labels_ficheros(self):
+        cfg_name = os.path.basename(self._views["config"]._path)
+        tar_name = os.path.basename(self._views["tareas"]._path)
+        self._lbl_cfg_file.configure(text=f"⚙ {cfg_name}")
+        self._lbl_tar_file.configure(text=f"📋 {tar_name}")
+
+    def _abrir_yaml(self, vista: str):
         from tkinter import filedialog
         path = filedialog.askopenfilename(
-            initialdir=SCRIPT_DIR,
+            initialdir=os.path.join(SCRIPT_DIR, "config"),
             filetypes=[("YAML", "*.yaml *.yml"), ("Todos", "*.*")],
         )
-        if path:
-            self._views["yaml"].cargar_archivo(path)
-            self.show_view("yaml")
+        if not path:
+            return
+        path_anterior = self._views[vista]._path
+        self._views[vista].cargar_archivo(path)
+        # Si el fichero cambió realmente, parar agente y limpiar log
+        if self._views[vista]._path != path_anterior:
+            self.detener_agente()
+            try:
+                open(LOG_PATH, "w").close()
+            except Exception:
+                pass
+        self._actualizar_labels_ficheros()
+        self.show_view(vista)
 
-    def _guardar_yaml(self):
-        self.show_view("yaml")
-        self._views["yaml"].guardar()
+    def _guardar_yaml(self, vista: str):
+        self.show_view(vista)
+        self._views[vista].guardar()
+
+    def _guardar_yaml_como(self, vista: str):
+        self.show_view(vista)
+        self._views[vista].guardar_como()
 
     def _limpiar_cache(self):
         self._views["cache"].eliminar_todo()
