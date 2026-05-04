@@ -46,9 +46,6 @@ class DashboardView(ctk.CTkScrollableFrame):
         ctk.CTkLabel(header, text="Dashboard",
                      font=ctk.CTkFont(size=20, weight="bold")).pack(side="left")
 
-        ctk.CTkButton(header, text="↺ Actualizar", width=110,
-                      command=self._refresh).pack(side="right")
-
         # Leyenda de colores
         leyenda = ctk.CTkFrame(header, fg_color="transparent")
         leyenda.pack(side="right", padx=16)

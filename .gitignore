@@ -5,6 +5,7 @@ __pycache__/
 
 # Estado en tiempo de ejecucion
 state/
+estado.json
 
 # Logs
 logs/
@@ -12,5 +13,15 @@ logs/
 # Scripts generados por el modelo
 scripts_cache/
 
-# Credenciales
-config/config.yaml
+# Configuracion local con keys reales y tareas personales
+config/config1.yaml
+config/tareas1.yaml
+
+# Claude Code settings (locales)
+.claude/
+
+# Ficheros generados por tareas
+Crear_Archiu/
+
+# Imagenes no usadas por el proyecto
+Imagenes/

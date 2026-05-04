@@ -88,7 +88,7 @@ class CacheManagerView(ctk.CTkFrame):
         acciones.grid(row=1, column=0, sticky="ew", pady=(0, 6))
 
         self._btn_copiar = ctk.CTkButton(
-            acciones, text="📋 Copiar para IA", width=150,
+            acciones, text="📋 Copiar", width=150,
             fg_color="#1a4a7a", hover_color="#1f6aa5", state="disabled",
             command=self._copiar_para_ia,
         )

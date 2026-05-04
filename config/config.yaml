@@ -1,0 +1,52 @@
+# Copia este archivo como config.yaml y rellena los valores.
+# Los modelos gemini-* usan la API de Google (requieren api_key).
+# El resto de modelos usan Ollama local (http://localhost:11434).
+
+modelo: qwen2.5-coder:7b           # Modelo principal
+modelo_fallback: gemini-2.5-flash-lite  # Fallback si timeout o max reintentos agotados
+api_key: "TU_API_KEY_DE_GOOGLE_GEMINI"  # Solo necesaria si usas modelos gemini-*
+
+telegram_token: "TU_TOKEN_DEL_BOT_DE_TELEGRAM"
+telegram_chat_id: "TU_CHAT_ID_DE_TELEGRAM"
+telegram_activo: true
+telegram_intervalo: 300             # Segundos minimos entre notificaciones Telegram
+
+log_path: "logs\\agente.log"
+log_prompt: false                   # Loguear el prompt enviado al modelo
+log_respuesta: false                # Loguear la respuesta completa del modelo
+log_comandos: false                 # Loguear el script antes de ejecutarlo
+log_salida: false                   # Loguear la salida linea a linea
+
+# Opciones de Ollama (ignoradas para modelos gemini-*)
+ollama_options:
+  temperature: 0.1
+  num_predict: 2000
+  num_ctx: 8192
+  num_gpu: -1                       # -1 = usar toda la GPU disponible
+
+# Reglas de dominio inyectadas en todos los prompts (personalizalas segun tu entorno)
+prompts_sistema:
+  - Eres un agente de automatizacion en Windows. Genera solo scripts Python 3.
+  - Usa solo la libreria estandar de Python y psutil (que esta instalada). No uses otras librerias de terceros.
+  - Si algun dato requerido esta vacio, es nulo o no se puede obtener, usa print() del error y sys.exit(1).
+  - Omite los acentos en las palabras dentro del codigo.
+  - Si usas try/except y el except se ejecuta por un error grave, siempre termina con sys.exit(1).
+  - Cada vez que imprimas un mensaje de error o fallo, en la linea siguiente ejecuta sys.exit(1).
+  - Estas en Windows. Para ejecutar comandos externos usa subprocess.run() con check=False.
+  - Para suprimir stderr usa stderr=subprocess.DEVNULL.
+  - Responde siempre en castellano.
+  - El script siempre debe mostrar al menos una linea de resultado con print() antes de terminar.
+  - No uses input() ni argumentos de linea de comandos obligatorios.
+
+# Criterios que el modelo usa para verificar si el resultado del script es correcto
+prompts_verificador:
+  - El resultado contiene datos reales y no esta vacio.
+  - Si la salida contiene palabras como Error, Exception, no encontrado, failed, no se pudo, acceso denegado o similares, responde ERROR.
+  - Resultado coherente con lo que se espera.
+
+# Reglas tecnicas fijas (equivalente a PROMPTS_SISTEMA_FIJOS en agente.py, se duplican aqui como referencia)
+# NOTA: edita PROMPTS_SISTEMA_FIJOS en agente.py para anadir nuevas restricciones tecnicas,
+# no este archivo.
+prompts_sistema_fijos:
+  - Si no conoces la respuesta o no tienes acceso a los datos necesarios, imprime un mensaje de error descriptivo con print() y termina con sys.exit(1).
+  - Para hacer peticiones HTTP usa siempre la libreria requests de Python. Nunca uses PowerShell ni Invoke-WebRequest desde subprocess.
