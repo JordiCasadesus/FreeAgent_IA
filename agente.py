@@ -41,6 +41,74 @@ TAREA_ACTUAL_PATH = os.path.join(STATE_DIR, "tarea_actual.json")
 TELEGRAM_MSG_PATH = os.path.join(STATE_DIR, "telegram_msg.json")
 
 
+# =============================================================================
+# Planificacion
+# =============================================================================
+
+def calcular_next_run(tarea_cfg: dict,
+                      ahora: datetime.datetime | None = None) -> datetime.datetime:
+    """Devuelve el proximo datetime de ejecucion para una tarea.
+
+    Soporta tres modos en tarea_cfg["programacion"]["tipo"]:
+      - "intervalo": cada N segundos  (programacion.valor)
+      - "diario":    todos los dias a una hora fija  (programacion.hora "HH:MM")
+      - "semanal":   ciertos dias de la semana      (programacion.hora + programacion.dias)
+    Si no existe "programacion", usa "intervalo" legacy desde tarea_cfg["intervalo"].
+    """
+    if ahora is None:
+        ahora = datetime.datetime.now()
+
+    prog = tarea_cfg.get("programacion")
+    if not prog:
+        iv = int(tarea_cfg.get("intervalo", 60))
+        return ahora + datetime.timedelta(seconds=iv)
+
+    tipo = prog.get("tipo", "intervalo")
+
+    if tipo == "intervalo":
+        iv = int(prog.get("valor", 60))
+        return ahora + datetime.timedelta(seconds=iv)
+
+    elif tipo == "diario":
+        hora_str = str(prog.get("hora", "08:00"))
+        try:
+            h, m = map(int, hora_str.split(":"))
+        except Exception:
+            h, m = 8, 0
+        siguiente = ahora.replace(hour=h, minute=m, second=0, microsecond=0)
+        if siguiente <= ahora:
+            siguiente += datetime.timedelta(days=1)
+        return siguiente
+
+    elif tipo == "semanal":
+        hora_str = str(prog.get("hora", "08:00"))
+        try:
+            h, m = map(int, hora_str.split(":"))
+        except Exception:
+            h, m = 8, 0
+        dias_map  = {"lun": 0, "mar": 1, "mie": 2, "jue": 3,
+                     "vie": 4, "sab": 5, "dom": 6}
+        dias_num  = sorted(dias_map[d] for d in prog.get("dias", []) if d in dias_map)
+        if not dias_num:
+            siguiente = ahora.replace(hour=h, minute=m, second=0, microsecond=0)
+            if siguiente <= ahora:
+                siguiente += datetime.timedelta(days=1)
+            return siguiente
+        wd = ahora.weekday()
+        for delta in range(7):
+            candidate_wd = (wd + delta) % 7
+            if candidate_wd in dias_num:
+                candidate = (ahora + datetime.timedelta(days=delta)).replace(
+                    hour=h, minute=m, second=0, microsecond=0)
+                if candidate > ahora:
+                    return candidate
+        delta_first = min((d - wd) % 7 for d in dias_num)
+        return (ahora + datetime.timedelta(days=delta_first + 7)).replace(
+            hour=h, minute=m, second=0, microsecond=0)
+
+    return ahora + datetime.timedelta(seconds=60)
+
+
 def _set_tarea_actual(nombre: str):
     try:
         with open(TAREA_ACTUAL_PATH, "w", encoding="utf-8") as f:
@@ -201,9 +269,8 @@ def main():
     # Planificacion next_run
     next_run: dict = {}
     for nombre, tarea in tareas.items():
-        iv = int(tarea.get("intervalo", 60))
         if nombre in ultimas_ejecuciones:
-            next_run[nombre] = ultimas_ejecuciones[nombre] + datetime.timedelta(seconds=iv)
+            next_run[nombre] = calcular_next_run(tarea, ultimas_ejecuciones[nombre])
         else:
             next_run[nombre] = datetime.datetime.min
 
@@ -275,16 +342,14 @@ def main():
 
                 for nombre in tareas:
                     if nombre not in next_run:
-                        iv = int(tareas[nombre].get("intervalo", 60))
                         next_run[nombre] = (
-                            ultimas_ejecuciones[nombre] + datetime.timedelta(seconds=iv)
+                            calcular_next_run(tareas[nombre], ultimas_ejecuciones[nombre])
                             if nombre in ultimas_ejecuciones
                             else datetime.datetime.min
                         )
 
             # -----------------------------------------------------------------
             for nombre_tarea, tarea in tareas.items():
-                intervalo      = int(tarea.get("intervalo", 60))
                 timeout_ollama = int(tarea.get("timeout_ollama") or 300)
                 timeout_script = int(tarea.get("timeout_script") or 120)
                 max_reintentos = int(tarea.get("max_reintentos") or 3)
@@ -293,9 +358,8 @@ def main():
                 opciones.update(tarea.get("ollama_options") or {})
 
                 if nombre_tarea not in next_run:
-                    iv = intervalo
                     next_run[nombre_tarea] = (
-                        ultimas_ejecuciones[nombre_tarea] + datetime.timedelta(seconds=iv)
+                        calcular_next_run(tarea, ultimas_ejecuciones[nombre_tarea])
                         if nombre_tarea in ultimas_ejecuciones
                         else datetime.datetime.min
                     )
@@ -312,7 +376,7 @@ def main():
                 _set_tarea_actual(nombre_tarea)
 
                 prompt_raw   = tarea.get("prompt", [])
-                prompt_tarea = "\n".join(prompt_raw) if isinstance(prompt_raw, list) else str(prompt_raw)
+                prompt_tarea = "\n".join(str(l) for l in prompt_raw) if isinstance(prompt_raw, list) else str(prompt_raw)
 
                 prompt_sistema     = obtener_prompt_sistema(cfg)
                 prompt_verificador = obtener_prompt_verificador(cfg)
@@ -379,8 +443,7 @@ def main():
                         escribir_log(
                             f"[{nombre_tarea}] No se genero script. Ciclo omitido.", log_path)
                         ultimas_ejecuciones[nombre_tarea] = datetime.datetime.now()
-                        next_run[nombre_tarea] = (datetime.datetime.now()
-                                                  + datetime.timedelta(seconds=intervalo))
+                        next_run[nombre_tarea] = calcular_next_run(tarea)
                         continue
 
                     script_actual     = gen["script"]
@@ -437,8 +500,7 @@ def main():
                             escribir_log(f"[{nombre_tarea}] Script guardado en cache.", log_path)
 
                         ultimas_ejecuciones[nombre_tarea] = datetime.datetime.now()
-                        next_run[nombre_tarea] = (datetime.datetime.now()
-                                                  + datetime.timedelta(seconds=intervalo))
+                        next_run[nombre_tarea] = calcular_next_run(tarea)
                         guardar_estado(ruta_estado, ultimas_ejecuciones)
 
                         salida_texto    = f"\n{resultado['salida']}" if resultado["salida"] else ""
@@ -581,8 +643,7 @@ def main():
                                     with open(archivo_hash, "w", encoding="utf-8") as f:
                                         f.write(hash_actual)
                                     ultimas_ejecuciones[nombre_tarea] = datetime.datetime.now()
-                                    next_run[nombre_tarea] = (datetime.datetime.now()
-                                                              + datetime.timedelta(seconds=intervalo))
+                                    next_run[nombre_tarea] = calcular_next_run(tarea)
                                     guardar_estado(ruta_estado, ultimas_ejecuciones)
 
                                     salida_texto    = f"\n{resultado_fb['salida']}" if resultado_fb.get("salida") else ""
@@ -620,8 +681,7 @@ def main():
                         refrescar_log(ultimos_resultados, tareas, log_path)
                         _telegram_si_toca()
                         # No guardamos en estado.json: al reiniciar el agente reintentara
-                        next_run[nombre_tarea] = (datetime.datetime.now()
-                                                  + datetime.timedelta(seconds=intervalo))
+                        next_run[nombre_tarea] = calcular_next_run(tarea)
 
                 _clear_tarea_actual()
 

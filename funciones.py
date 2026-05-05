@@ -1,4 +1,4 @@
-"""funciones.py - Funciones auxiliares del agente PowerBot (Python)
+"""funciones.py - Funciones auxiliares del agente FreeAgent_IA (Python)
 
 Funciones:
   escribir_log           -> guarda mensajes con timestamp en el log
@@ -167,14 +167,28 @@ def validar_config(cfg: dict, tareas: dict):
             errores.append(f"Tarea '{nombre}': falta 'prompt'")
         elif not isinstance(t["prompt"], list):
             errores.append(f"Tarea '{nombre}': 'prompt' debe ser una lista YAML (items con '- ')")
-        intervalo = t.get("intervalo")
-        if intervalo is not None:
-            if not isinstance(intervalo, int):
-                errores.append(f"Tarea '{nombre}': 'intervalo' debe ser un entero (es: {intervalo})")
-            elif intervalo <= 0:
-                errores.append(f"Tarea '{nombre}': 'intervalo' debe ser positivo (es: {intervalo})")
+        prog = t.get("programacion")
+        if prog is not None:
+            tipo = prog.get("tipo", "")
+            if tipo not in ("intervalo", "diario", "semanal"):
+                errores.append(f"Tarea '{nombre}': programacion.tipo debe ser 'intervalo', 'diario' o 'semanal'")
+            elif tipo == "intervalo":
+                valor = prog.get("valor")
+                if valor is None or not isinstance(valor, int) or valor <= 0:
+                    errores.append(f"Tarea '{nombre}': programacion.valor debe ser un entero positivo")
+            elif tipo in ("diario", "semanal"):
+                hora = str(prog.get("hora", ""))
+                if not hora or len(hora) != 5 or hora[2] != ":":
+                    errores.append(f"Tarea '{nombre}': programacion.hora debe tener formato HH:MM")
+        else:
+            intervalo = t.get("intervalo")
+            if intervalo is not None:
+                if not isinstance(intervalo, int):
+                    errores.append(f"Tarea '{nombre}': 'intervalo' debe ser un entero (es: {intervalo})")
+                elif intervalo <= 0:
+                    errores.append(f"Tarea '{nombre}': 'intervalo' debe ser positivo (es: {intervalo})")
     if errores:
-        raise ValueError("Errores de configuracion en tareas.yaml:\n" + "\n".join(errores))
+        raise ValueError("Errores de configuracion:\n" + "\n".join(errores))
 
 
 # =============================================================================
@@ -279,13 +293,25 @@ def llamar_gemini_chat(modelo: str, messages: list, api_key: str,
 # Llamar-ModeloChat  (router)
 # =============================================================================
 
+def _es_modelo_ollama(modelo: str) -> bool:
+    if ":" in modelo:
+        return True
+    try:
+        r = requests.get("http://localhost:11434/api/tags", timeout=3)
+        if r.status_code == 200:
+            nombres = [m["name"] for m in r.json().get("models", [])]
+            return modelo in nombres
+    except Exception:
+        pass
+    return False
+
+
 def llamar_modelo_chat(modelo: str, messages: list, api_key: str = "",
                        log_path: str = "", timeout_segundos: int = 300,
                        opciones: Optional[dict] = None) -> Optional[str]:
-    _GOOGLE_API = ("gemini-", "gemma-")
-    if modelo.startswith(_GOOGLE_API):
-        return llamar_gemini_chat(modelo, messages, api_key, log_path, timeout_segundos)
-    return llamar_ollama_chat(modelo, messages, log_path, timeout_segundos, opciones)
+    if _es_modelo_ollama(modelo):
+        return llamar_ollama_chat(modelo, messages, log_path, timeout_segundos, opciones)
+    return llamar_gemini_chat(modelo, messages, api_key, log_path, timeout_segundos)
 
 
 # =============================================================================

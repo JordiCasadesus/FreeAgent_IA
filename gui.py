@@ -1,4 +1,4 @@
-"""gui.py - Ventana principal de PowerBot
+"""gui.py - Ventana principal de FreeAgent_IA
 
 Layout:
   - Menu bar superior (Archivo, Agente, Ayuda)
@@ -60,7 +60,7 @@ class App(ctk.CTk):
 
     def __init__(self):
         super().__init__()
-        self.title("PowerBot")
+        self.title("FreeAgent_IA")
         self.geometry("1280x720")
         self.minsize(900, 550)
 
@@ -127,7 +127,7 @@ class App(ctk.CTk):
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
-        ctk.CTkLabel(self.sidebar, text="⚡ PowerBot",
+        ctk.CTkLabel(self.sidebar, text="⚡ FreeAgent_IA",
                      font=ctk.CTkFont(size=20, weight="bold"),
                      text_color="#5aacff").pack(pady=(22, 2), padx=10)
 
@@ -309,7 +309,7 @@ class App(ctk.CTk):
         win.geometry("340x160")
         win.resizable(False, False)
         win.grab_set()
-        ctk.CTkLabel(win, text="PowerBot",
+        ctk.CTkLabel(win, text="FreeAgent_IA",
                      font=ctk.CTkFont(size=20, weight="bold")).pack(pady=(24, 4))
         ctk.CTkLabel(win, text="Agente de automatizacion con IA\nOllama + Gemini + Telegram",
                      justify="center").pack()

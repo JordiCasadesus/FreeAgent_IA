@@ -1,4 +1,4 @@
-# PowerBot — Agente de automatizacion con IA
+# FreeAgent_IA — Agente de automatizacion con IA
 
 Agente Python que usa modelos de IA (Ollama local o Google Gemini) para generar y ejecutar scripts Python de forma autonoma,
 con notificaciones via Telegram.
@@ -29,7 +29,7 @@ con notificaciones via Telegram.
 ## Como funciona
 
 1. Lee `tareas.yaml` (hot-reload si cambia el archivo sin reiniciar)
-2. Por cada tarea, cuando se cumple su `intervalo` en segundos:
+2. Por cada tarea, cuando llega su momento segun `programacion` (intervalo, hora diaria o dias de semana):
    - Calcula MD5 del prompt completo — si coincide con el `.hash` en cache, usa el script cacheado
    - Si no hay cache valida, llama al modelo via API chat para generar el script
    - Ejecuta el script en un proceso hijo con timeout (fichero temporal en `/tmp`)
@@ -73,43 +73,63 @@ Actualmente incluye:
 Para anadir nuevas restricciones tecnicas recurrentes, editar `PROMPTS_SISTEMA_FIJOS` en `agente.py`,
 **no** `tareas.yaml`.
 
+## Ficheros de configuracion
+
+La configuracion esta dividida en dos ficheros YAML separados:
+
+| Fichero | Contenido | Marcador primera linea |
+|---|---|---|
+| `config/config.yaml` | Modelo, Telegram, logging, ollama_options, prompts | `# powerbot:config` |
+| `config/tareas.yaml` | Definicion de tareas | `# powerbot:tareas` |
+
+El marcador de la primera linea permite al editor detectar si se carga el tipo correcto de fichero.
+
 ## tareas.yaml — estructura
 
 ```yaml
-modelo: qwen2.5-coder:7b           # Modelo principal (gemini-* = Google API, resto = Ollama local)
-modelo_fallback: gemini-2.5-flash-lite  # Fallback si timeout o max_reintentos
-api_key: "..."              # Solo necesaria si modelo empieza por gemini-
-telegram_token: ...
-telegram_chat_id: "..."
-log_path: logs\agente.log
-max_reintentos: 3
-timeout_ollama: 500                # Segundos max para que el modelo responda
-timeout_script: 120                # Segundos max para ejecutar el script generado
-log_prompt:    false               # Loguear prompt enviado al modelo
-log_respuesta: false               # Loguear respuesta completa del modelo
-log_comandos:  false               # Loguear el script antes de ejecutarlo
-log_salida:    false               # Loguear salida linea a linea
-
-# Requisitos de dominio inyectados en todos los prompts (lista)
-# NO incluir reglas tecnicas de Python aqui — van en PROMPTS_SISTEMA_FIJOS de agente.py
-prompts_sistema:
-  - Eres un agente de automatizacion en Windows. Genera solo scripts Python 3.
-  - ...
-
-# Verificadores: el modelo juzga si el resultado de ejecutar el script es correcto
-prompts_verificador:
-  - El resultado contiene datos reales y no esta vacio.
-  - ...
-
+# powerbot:tareas
 tareas:
   nombre_tarea:
-    intervalo: 60          # Segundos entre ejecuciones
-    timeout_ollama: 300    # Opcional: sobreescribe el global
-    timeout_script: 60     # Opcional: sobreescribe el global
-    prompt_verificador: "verificacion especifica de esta tarea"  # Opcional
+    programacion:
+      tipo: intervalo          # "intervalo" | "diario" | "semanal"
+      valor: 3600              # segundos (solo para tipo=intervalo)
+      hora: "08:00"            # HH:MM (para tipo=diario o semanal)
+      dias: [lun, mie, vie]    # (solo para tipo=semanal)
+    timeout_ollama: 300        # Opcional: sobreescribe el global de config.yaml
+    timeout_script: 60         # Opcional: sobreescribe el global
+    max_reintentos: 3          # Opcional: sobreescribe el global
+    prompt_verificador: "..."  # Opcional: criterio extra de verificacion
     prompt:
       - Linea 1 del prompt
       - Linea 2 del prompt
+```
+
+**Compatibilidad:** el campo antiguo `intervalo: N` (segundos) sigue funcionando si no existe `programacion`.
+
+## config.yaml — estructura
+
+```yaml
+# powerbot:config
+modelo: ""                     # Modelo principal (gemini-* = Google API, resto = Ollama local)
+modelo_fallback: ""            # Fallback si timeout o max_reintentos
+api_key: ""                    # Solo necesaria si modelo empieza por gemini-
+telegram_token: "..."
+telegram_chat_id: "..."
+telegram_activo: true
+telegram_intervalo: 300        # Segundos minimos entre notificaciones
+log_path: logs\agente.log
+log_prompt: false
+log_respuesta: false
+log_comandos: false
+log_salida: false
+ollama_options:
+  temperature: 0.1
+  num_ctx: 8192
+  num_gpu: -1
+prompts_sistema:
+  - Eres un agente de automatizacion en Windows...
+prompts_verificador:
+  - El resultado contiene datos reales y no esta vacio.
 ```
 
 ## Cache de scripts
@@ -167,6 +187,18 @@ El interprete correcto en este sistema es `py`, no `python` (que apunta al Micro
 - Actualmente: `gemini-2.5-flash-lite` (Google API, bajo consumo de tokens)
 - Si el fallback tiene exito, el script se guarda en cache con el modelo fallback como autor
 
+## Planificacion de tareas (calcular_next_run en agente.py)
+
+Funcion que calcula el proximo datetime de ejecucion segun el bloque `programacion`:
+
+| tipo | comportamiento |
+|---|---|
+| `intervalo` | `ahora + valor segundos` |
+| `diario` | proxima ocurrencia de `hora` (HH:MM) — si ya paso hoy, manana |
+| `semanal` | proxima ocurrencia de `hora` en uno de los `dias` (lun/mar/mie/jue/vie/sab/dom) |
+
+Retrocompatible: si no existe `programacion`, usa `intervalo` en segundos (formato antiguo).
+
 ## Funciones clave en funciones.py
 
 | Funcion | Descripcion |
@@ -179,7 +211,7 @@ El interprete correcto en este sistema es `py`, no `python` (que apunta al Micro
 | `verificar_resultado_chat` | Continua la conversacion con la salida real del script. Devuelve `{ok, razon}` |
 | `ejecutar_script` | Valida sintaxis, escribe fichero temporal, ejecuta con subprocess y timeout. Devuelve `{exito, error, exit_code, salida}` |
 | `leer_yaml` | Usa pyyaml (`yaml.safe_load`). Devuelve `{config, tareas}` |
-| `validar_config` | Comprueba campos obligatorios y tipos. Lanza ValueError con todos los errores si falla |
+| `validar_config` | Comprueba campos obligatorios y tipos (acepta `programacion` y `intervalo` legacy). Lanza ValueError si falla |
 
 ## Historial de cambios importantes (conversaciones anteriores)
 
@@ -212,6 +244,15 @@ El interprete correcto en este sistema es `py`, no `python` (que apunta al Micro
 - Creado `PROMPTS_SISTEMA_FIJOS` en `agente.py`: reglas tecnicas de Python inyectadas siempre en los prompts sin necesidad de ponerlas en tareas.yaml. Actualmente: uso correcto de subprocess.run con capture_output.
 - `.vscode/tasks.json` y `launch.json` creados. Tasks usan `py` (no `python`).
 - `Instalar_dependencias.bat` para instalar requirements.txt con un doble clic.
+
+### 2026-05-05 — Planificacion avanzada y mejoras GUI
+- Campo `intervalo` sustituido por bloque `programacion` con tipos `intervalo`, `diario` y `semanal`.
+- Nueva funcion `calcular_next_run` en `agente.py`. `validar_config` acepta ambos formatos.
+- GUI: editor de tareas muestra selector de tipo + campos dinamicos (cada N, hora HH:MM, dias semana).
+- GUI: etiquetas de campos renombradas a texto descriptivo (Telegram activo, Token del bot, Registrar prompt, etc.).
+- GUI: auto-guardado silencioso al cambiar de seccion si hay cambios reales.
+- Separacion de config en dos ficheros: `config/config.yaml` (config global) y `config/tareas.yaml` (tareas).
+- Marcadores `# powerbot:config` / `# powerbot:tareas` en primera linea para validacion de tipo en el editor.
 
 ### Nota sobre historial de sesiones
 - El repo git es local sin remote configurado (`git remote -v` devuelve vacio).

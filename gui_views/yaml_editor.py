@@ -41,6 +41,7 @@ _C = {
 }
 
 
+
 class YamlEditorView(ctk.CTkFrame):
 
     MARKER_CONFIG = "# powerbot:config"
@@ -156,7 +157,7 @@ class YamlEditorView(ctk.CTkFrame):
         if self._es_config():
             secciones = [
                 ("Config global",        "config_global",       _C["config"],      "Properties.png"),
-                ("Ollama Options",       "ollama_options",      _C["ollama"],      "Tools.png"),
+                ("Ollama",               "ollama",              _C["ollama"],      "Tools.png"),
                 ("Telegram",             "telegram",            _C["telegram"],    "E-mail.png"),
                 ("Prompts sistema",      "prompts_sistema",     _C["sistema"],     "Comment.png"),
                 ("Prompts verificador",  "prompts_verificador", _C["verificador"], "Check boxes.png"),
@@ -177,13 +178,21 @@ class YamlEditorView(ctk.CTkFrame):
 
             _icono_tarea = _icon("Script.png")
             for nombre in (self._data.get("tareas") or {}).keys():
+                row = ctk.CTkFrame(self._nav, fg_color="transparent")
+                row.pack(fill="x", pady=2)
                 ctk.CTkButton(
-                    self._nav, text=f"  {nombre}", anchor="w",
+                    row, text=f"  {nombre}", anchor="w",
                     image=_icono_tarea, compound="left",
                     height=32, font=ctk.CTkFont(size=12),
                     fg_color="#2b2b2b", hover_color=_C["tarea_hover"],
                     command=lambda n=nombre: self._navigate(f"tarea:{n}"),
-                ).pack(fill="x", pady=2)
+                ).pack(side="left", fill="x", expand=True)
+                ctk.CTkButton(
+                    row, text="✕", width=28, height=32,
+                    fg_color="#2b2b2b", hover_color="#8b1a1a",
+                    font=ctk.CTkFont(size=11),
+                    command=lambda n=nombre: self._eliminar_tarea(n),
+                ).pack(side="left")
 
             ctk.CTkButton(
                 self._nav, text="+ Nueva tarea",
@@ -193,15 +202,21 @@ class YamlEditorView(ctk.CTkFrame):
             ).pack(fill="x", pady=(10, 2))
 
     def _navigate(self, section_key: str):
+        import copy
         if self._raw_mode:
             return
+        if section_key == self._current_section:
+            return
+        data_antes = copy.deepcopy(self._data)
         self._save_current_section()
+        if self._data != data_antes:
+            self.guardar()
         self._current_section = section_key
         self._clear_form()
 
         dispatch = {
             "config_global":       self._form_config_global,
-            "ollama_options":      self._form_ollama_options,
+            "ollama":              self._form_ollama,
             "telegram":            self._form_telegram,
             "prompts_sistema":     lambda: self._form_prompts_list("prompts_sistema"),
             "prompts_verificador": lambda: self._form_prompts_list("prompts_verificador"),
@@ -245,6 +260,19 @@ class YamlEditorView(ctk.CTkFrame):
         self._widget_refs[key] = ("entry", var)
 
 
+    def _field_desc(self, parent, row: int, label: str, value,
+                    key: str, desc: str, width=120):
+        ctk.CTkLabel(parent, text=label, anchor="e", width=190,
+                     font=ctk.CTkFont(size=12)).grid(
+            row=row, column=0, sticky="e", padx=(16, 8), pady=3)
+        inner = ctk.CTkFrame(parent, fg_color="transparent")
+        inner.grid(row=row, column=1, sticky="w", padx=(0, 16), pady=3)
+        var = ctk.StringVar(value=str(value) if value is not None else "")
+        ctk.CTkEntry(inner, textvariable=var, width=width).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(inner, text=desc, anchor="w",
+                     text_color="#777", font=ctk.CTkFont(size=11)).pack(side="left")
+        self._widget_refs[key] = ("entry", var)
+
     def _combo(self, parent, row, label, value, key, opciones):
         ctk.CTkLabel(parent, text=label, anchor="e", width=190,
                     font=ctk.CTkFont(size=12)).grid(
@@ -274,7 +302,7 @@ class YamlEditorView(ctk.CTkFrame):
         tb = ctk.CTkTextbox(parent, height=height,
                             font=ctk.CTkFont(family="Consolas", size=12))
         tb.grid(row=row, column=1, sticky="ew", padx=(0, 16), pady=3)
-        content = ("\n".join(items)
+        content = ("\n".join(str(i) for i in items)
                    if isinstance(items, list)
                    else (items or ""))
         tb.insert("0.0", content)
@@ -292,7 +320,7 @@ class YamlEditorView(ctk.CTkFrame):
                             font=ctk.CTkFont(family="Consolas", size=12))
         tb.grid(row=row + 1, column=0, columnspan=2,
                 sticky="ew", padx=16, pady=(0, 6))
-        content = ("\n".join(items)
+        content = ("\n".join(str(i) for i in items)
                    if isinstance(items, list)
                    else (items or ""))
         tb.insert("0.0", content)
@@ -316,7 +344,7 @@ class YamlEditorView(ctk.CTkFrame):
 
     def _modelo_boxes(self, parent, row: int, c: dict, ollama: list, gemini: list) -> int:
         """Dos cajas lado a lado: Ollama | Google API. Devuelve la siguiente fila."""
-        _es_google = lambda v: v and (v.startswith("gemini-") or v.startswith("gemma-"))
+        _es_google = lambda v: bool(v) and ":" not in v
 
         val_m  = c.get("modelo", "")
         val_fb = c.get("modelo_fallback", "")
@@ -429,10 +457,10 @@ class YamlEditorView(ctk.CTkFrame):
 
 
         self._sec_header(f, r, "Logging  (solo afectan al historial completo)", _C["config"]); r += 1
-        self._check_desc(f, r, "log_prompt",    c.get("log_prompt",    False), "log_prompt",    "Prompt completo enviado al modelo antes de cada generacion."); r += 1
-        self._check_desc(f, r, "log_respuesta", c.get("log_respuesta", False), "log_respuesta", "Respuesta cruda completa que devuelve el modelo.");            r += 1
-        self._check_desc(f, r, "log_comandos",  c.get("log_comandos",  False), "log_comandos",  "Codigo Python del script justo antes de ejecutarlo.");         r += 1
-        self._check_desc(f, r, "log_salida",    c.get("log_salida",    False), "log_salida",    "Cada linea de salida (stdout) del script en tiempo real.");    r += 1
+        self._check_desc(f, r, "Registrar prompt",    c.get("log_prompt",    False), "log_prompt",    "Prompt completo enviado al modelo antes de cada generacion."); r += 1
+        self._check_desc(f, r, "Registrar respuesta", c.get("log_respuesta", False), "log_respuesta", "Respuesta cruda completa que devuelve el modelo.");            r += 1
+        self._check_desc(f, r, "Registrar script",    c.get("log_comandos",  False), "log_comandos",  "Codigo Python del script justo antes de ejecutarlo.");         r += 1
+        self._check_desc(f, r, "Registrar salida",    c.get("log_salida",    False), "log_salida",    "Cada linea de salida (stdout) del script en tiempo real.");    r += 1
 
     def _form_telegram(self):
         f = self._form_scroll
@@ -440,39 +468,264 @@ class YamlEditorView(ctk.CTkFrame):
         r = 0
 
         self._sec_header(f, r, "Configuracion Telegram", _C["telegram"]); r += 1
-        self._check_desc(f, r, "telegram_activo", c.get("telegram_activo", True), "telegram_activo",
+        self._check_desc(f, r, "Telegram activo", c.get("telegram_activo", True), "telegram_activo",
                          "Enviar notificaciones al bot de Telegram."); r += 1
-        self._field(f, r, "telegram_token",    c.get("telegram_token",    ""), "telegram_token",    masked=True); r += 1
-        self._field(f, r, "telegram_chat_id",  c.get("telegram_chat_id",  ""), "telegram_chat_id",  width=200);   r += 1
-        self._info(f, r, "  Obtén el chat_id enviando un mensaje a tu bot y consultando /getUpdates."); r += 1
-        self._field(f, r, "telegram_intervalo (s)", c.get("telegram_intervalo", 300), "telegram_intervalo", width=120); r += 1
+        self._field(f, r, "Token del bot",      c.get("telegram_token",    ""), "telegram_token",    masked=True); r += 1
+        self._field(f, r, "Identificador chat", c.get("telegram_chat_id",  ""), "telegram_chat_id",  width=200);   r += 1
+        self._info(f, r, "  Obtenlo enviando un mensaje a tu bot y consultando /getUpdates."); r += 1
+        self._field(f, r, "Intervalo notif. (s)", c.get("telegram_intervalo", 300), "telegram_intervalo", width=120); r += 1
         self._info(f, r, "  Segundos minimos entre actualizaciones del tablon de estado en Telegram."); r += 1
 
-    def _form_ollama_options(self):
+    def _form_ollama(self):
+        import threading
+        import webbrowser
+        import requests as _req
+
         f    = self._form_scroll
         opts = self._data.get("ollama_options") or {}
         r    = 0
 
-        self._sec_header(f, r, "Opciones de Ollama", _C["ollama"]); r += 1
+        # ── Configuracion ────────────────────────────────────────────────────
+        self._sec_header(f, r, "Configuracion Ollama", _C["ollama"]); r += 1
         self._info(f, r, "Deja vacio para usar el valor por defecto del modelo."); r += 1
 
         campos = [
-            ("temperature",    "temperature (0.0 - 1.0)"),
-            ("num_predict",    "num_predict  (max tokens)"),
-            ("num_ctx",        "num_ctx  (ventana contexto)"),
-            ("num_gpu",        "num_gpu  (-1=todas, 0=CPU)"),
-            ("top_k",          "top_k"),
-            ("top_p",          "top_p"),
-            ("repeat_penalty", "repeat_penalty"),
-            ("num_thread",     "num_thread  (hilos CPU)"),
-            ("num_batch",      "num_batch"),
+            ("temperature",    "temperature",    "Creatividad. 0=preciso, 1=aleatorio"),
+            ("num_predict",    "num_predict",    "Max tokens a generar en la respuesta"),
+            ("num_ctx",        "num_ctx",        "Tokens de contexto que el modelo recuerda"),
+            ("num_gpu",        "num_gpu",        "-1=toda la GPU, 0=solo CPU, N=capas GPU"),
+            ("top_k",          "top_k",          "Limita vocabulario a los K tokens mas probables"),
+            ("top_p",          "top_p",          "Muestreo acumulativo de probabilidad"),
+            ("repeat_penalty", "repeat_penalty", "Penaliza repetir las mismas palabras (>1 evita)"),
+            ("num_thread",     "num_thread",     "Hilos CPU a usar (0=automatico)"),
+            ("num_batch",      "num_batch",      "Tokens procesados en paralelo por lote"),
         ]
-        for campo, label in campos:
+
+        cols_frame = ctk.CTkFrame(f, fg_color="transparent")
+        cols_frame.grid(row=r, column=0, columnspan=3, sticky="ew", padx=8, pady=4); r += 1
+        col_l = ctk.CTkFrame(cols_frame, fg_color="transparent")
+        col_r = ctk.CTkFrame(cols_frame, fg_color="transparent")
+        col_l.pack(side="left", fill="both", expand=True)
+        col_r.pack(side="left", fill="both", expand=True)
+
+        mitad = (len(campos) + 1) // 2
+        for i, (campo, label, desc) in enumerate(campos):
+            parent_col = col_l if i < mitad else col_r
+            sub_r = i if i < mitad else i - mitad
             val = opts.get(campo, "")
-            self._field(f, r, label,
-                        val if val != "" else "",
-                        f"ollama_{campo}", width=120)
-            r += 1
+            ctk.CTkLabel(parent_col, text=label, anchor="e", width=120,
+                         font=ctk.CTkFont(size=12)).grid(
+                row=sub_r, column=0, sticky="e", padx=(8, 6), pady=3)
+            var = ctk.StringVar(value=str(val) if val != "" else "")
+            ctk.CTkEntry(parent_col, textvariable=var, width=90).grid(
+                row=sub_r, column=1, sticky="w", padx=(0, 6), pady=3)
+            ctk.CTkLabel(parent_col, text=desc, anchor="w",
+                         font=ctk.CTkFont(size=10), text_color="#777").grid(
+                row=sub_r, column=2, sticky="w", padx=(0, 8), pady=3)
+            self._widget_refs[f"ollama_{campo}"] = ("entry", var)
+
+        # ── Separador ────────────────────────────────────────────────────────
+        ctk.CTkFrame(f, height=1, fg_color="#3a3a3a").grid(
+            row=r, column=0, columnspan=3, sticky="ew", padx=10, pady=12); r += 1
+
+        # ── Modelos ──────────────────────────────────────────────────────────
+        self._sec_header(f, r, "Modelos", _C["ollama"]); r += 1
+
+        if not self._ollama_disponible():
+            ctk.CTkLabel(f, text="Ollama no esta instalado en este sistema.",
+                         text_color="#f0a020",
+                         font=ctk.CTkFont(size=12)).grid(
+                row=r, column=0, columnspan=2, sticky="w", padx=16, pady=(12, 4)); r += 1
+            ctk.CTkButton(
+                f, text="Descargar Ollama",
+                fg_color="#1a6b2a", hover_color="#228b36",
+                command=lambda: webbrowser.open("https://ollama.com/download"),
+            ).grid(row=r, column=0, columnspan=2, sticky="w", padx=16, pady=4); r += 1
+            ctk.CTkLabel(f, text="Una vez instalado, reinicia la GUI.",
+                         text_color="#888",
+                         font=ctk.CTkFont(size=11)).grid(
+                row=r + 1, column=0, columnspan=2, sticky="w", padx=16, pady=(4, 8))
+            return
+
+        # Instalados
+        self._sec_header(f, r, "Instalados", _C["ollama"]); r += 1
+        instalados_frame = ctk.CTkFrame(f, fg_color="transparent")
+        instalados_frame.grid(row=r, column=0, columnspan=2, sticky="ew"); r += 1
+        installed_set = set()
+
+        def _refresh_instalados():
+            for w in instalados_frame.winfo_children():
+                w.destroy()
+            modelos = self._cargar_modelos_ollama()
+            installed_set.clear()
+            installed_set.update(modelos)
+            if modelos:
+                for m in modelos:
+                    ctk.CTkLabel(instalados_frame, text=f"  • {m}", anchor="w",
+                                 font=ctk.CTkFont(family="Consolas", size=11),
+                                 text_color="#8bc4ff").pack(anchor="w", padx=16, pady=1)
+            else:
+                ctk.CTkLabel(instalados_frame, text="  (ninguno instalado)",
+                             text_color="#888").pack(anchor="w", padx=16)
+
+        _refresh_instalados()
+
+        # Buscar e instalar
+        self._sec_header(f, r, "Buscar e instalar", _C["ollama"]); r += 1
+
+        hint_f = ctk.CTkFrame(f, fg_color="#0e1e30", corner_radius=6)
+        hint_f.grid(row=r, column=0, columnspan=2, sticky="ew", padx=16, pady=(4, 8))
+        hint_f.columnconfigure(0, weight=1)
+        r += 1
+        ctk.CTkLabel(
+            hint_f,
+            text=(
+                "Explora el catalogo completo en  ollama.com/library,"
+                "copia el nombre del modelo (ej: llama3.2, gemma3:4b)"
+                "y escribelo en el buscador para instalarlo."
+            ),
+            anchor="w", justify="left",
+            font=ctk.CTkFont(size=11), text_color="#aaaaaa",
+        ).grid(row=0, column=0, sticky="w", padx=12, pady=(8, 6))
+        ctk.CTkButton(
+            hint_f, text="Abrir ollama.com/library",
+            fg_color="transparent", hover_color="#1a2a3a",
+            border_width=1, border_color="#2255aa",
+            text_color="#6699dd", font=ctk.CTkFont(size=11),
+            height=28, width=200,
+            command=lambda: webbrowser.open("https://ollama.com/library"),
+        ).grid(row=1, column=0, sticky="w", padx=10, pady=(0, 8))
+
+        search_f = ctk.CTkFrame(f, fg_color="transparent")
+        search_f.grid(row=r, column=0, columnspan=2, sticky="ew", padx=16, pady=4)
+        search_f.columnconfigure(0, weight=1)
+        r += 1
+
+        search_var = ctk.StringVar()
+        search_entry = ctk.CTkEntry(
+            search_f, textvariable=search_var,
+            placeholder_text="Nombre del modelo  (ej: qwen, llama, gemma...)")
+        search_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        btn_f = ctk.CTkFrame(search_f, fg_color="transparent")
+        btn_f.pack(side="right")
+
+        results_frame = ctk.CTkScrollableFrame(f, height=220, fg_color="#0a1520")
+        results_frame.grid(row=r, column=0, columnspan=2, sticky="ew", padx=16, pady=4)
+        results_frame.columnconfigure(0, weight=1)
+        r += 1
+
+        output_box = ctk.CTkTextbox(f, height=90,
+                                    font=ctk.CTkFont(family="Consolas", size=11))
+        output_box.grid(row=r, column=0, columnspan=2, sticky="ew", padx=16, pady=(4, 8))
+
+        def _ui(fn):
+            try:
+                if output_box.winfo_exists():
+                    fn()
+            except Exception:
+                pass
+
+        def _pull(nombre: str):
+            output_box.delete("0.0", "end")
+            output_box.insert("end", f"Descargando {nombre}...\n")
+
+            def _run():
+                try:
+                    proc = subprocess.Popen(
+                        ["ollama", "pull", nombre],
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True, bufsize=1,
+                        encoding="utf-8", errors="replace",
+                    )
+                    for raw in proc.stdout:
+                        line = raw.replace("\r", "\n").strip()
+                        if line:
+                            f.after(0, lambda l=line: _ui(lambda: (
+                                output_box.insert("end", l + "\n"),
+                                output_box.see("end"),
+                            )))
+                    proc.wait()
+                    if proc.returncode == 0:
+                        f.after(0, lambda: _ui(lambda: (
+                            output_box.insert("end", "Completado OK\n"),
+                            output_box.see("end"),
+                        )))
+                        f.after(0, _refresh_instalados)
+                        f.after(0, _buscar)
+                        f.after(3000, lambda: _ui(lambda: output_box.delete("0.0", "end")))
+                    else:
+                        msg = f"Error (codigo {proc.returncode})\n"
+                        f.after(0, lambda m=msg: _ui(lambda: output_box.insert("end", m)))
+                except Exception as ex:
+                    f.after(0, lambda e=ex: _ui(lambda: output_box.insert("end", f"Error: {e}\n")))
+
+            threading.Thread(target=_run, daemon=True).start()
+
+        def _mostrar_resultados(modelos: list):
+            for w in results_frame.winfo_children():
+                w.destroy()
+            if not modelos:
+                ctk.CTkLabel(
+                    results_frame,
+                    text="Sin resultados. Escribe el nombre exacto y pulsa Instalar.",
+                    text_color="#888", font=ctk.CTkFont(size=11),
+                ).pack(padx=8, pady=12)
+                return
+            for m in modelos:
+                nombre   = m["name"]
+                size_gb  = m["size"] / 1024**3
+                size_txt = f"{size_gb:.1f} GB" if size_gb >= 0.1 else "API"
+                ya = nombre in installed_set
+
+                row_f = ctk.CTkFrame(results_frame, fg_color="#0d1a2b", corner_radius=4)
+                row_f.pack(fill="x", padx=4, pady=2)
+                ctk.CTkLabel(row_f, text=nombre, anchor="w",
+                             font=ctk.CTkFont(family="Consolas", size=11)).pack(
+                    side="left", padx=8, pady=5)
+                ctk.CTkLabel(row_f, text=size_txt, width=70, anchor="e",
+                             text_color="#888",
+                             font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
+                ctk.CTkButton(
+                    row_f,
+                    text="Instalado" if ya else "Instalar",
+                    width=90,
+                    fg_color="#2b4a2b" if ya else "#1a5a1a",
+                    hover_color="#2b4a2b" if ya else "#228b22",
+                    state="disabled" if ya else "normal",
+                    command=lambda n=nombre: _pull(n),
+                ).pack(side="right", padx=6, pady=4)
+
+        def _buscar():
+            termino = search_var.get().strip().lower()
+
+            def _run():
+                try:
+                    resp = _req.get("https://ollama.com/api/tags", timeout=8)
+                    todos = resp.json().get("models", []) if resp.status_code == 200 else []
+                    filtrados = [m for m in todos if termino in m["name"].lower()] \
+                        if termino else todos
+                    filtrados.sort(key=lambda m: m["size"])
+                    f.after(0, lambda: _mostrar_resultados(filtrados))
+                except Exception as ex:
+                    f.after(0, lambda e=ex: _ui(lambda: output_box.insert("end", f"Error al buscar: {e}\n")))
+
+            threading.Thread(target=_run, daemon=True).start()
+
+        def _instalar_directo():
+            nombre = search_var.get().strip()
+            if nombre:
+                _pull(nombre)
+
+        ctk.CTkButton(btn_f, text="Buscar", width=90,
+                      fg_color="#1a4a8a", hover_color="#2255aa",
+                      command=_buscar).pack(side="left", padx=(0, 4))
+        ctk.CTkButton(btn_f, text="Instalar", width=90,
+                      fg_color="#1a5a1a", hover_color="#228b22",
+                      command=_instalar_directo).pack(side="left")
+
+        search_entry.bind("<Return>", lambda e: _buscar())
+        f.after(100, _buscar)
 
     def _form_prompts_list(self, key: str):
         f     = self._form_scroll
@@ -517,6 +770,13 @@ class YamlEditorView(ctk.CTkFrame):
         items = self._data.get("prompts_sistema_fijos") or []
         self._textbox_full(f, r, "Reglas:", items, "prompts_sistema_fijos", height=280)
 
+    def _ollama_disponible(self) -> bool:
+        try:
+            r = subprocess.run(["ollama", "--version"], capture_output=True, timeout=3)
+            return r.returncode == 0
+        except Exception:
+            return False
+
     def _form_tarea(self, nombre: str):
         f     = self._form_scroll
         tarea = (self._data.get("tareas") or {}).get(nombre, {})
@@ -524,15 +784,100 @@ class YamlEditorView(ctk.CTkFrame):
 
         self._sec_header(f, r, f"Tarea: {nombre}", _C["tarea"]); r += 1
 
-        self._field(f, r, "intervalo (s)",      tarea.get("intervalo", 60),       f"{nombre}__intervalo",       width=120); r += 1
-        self._field(f, r, "timeout agente (s)", tarea.get("timeout_ollama", ""), f"{nombre}__timeout_ollama",  width=120); r += 1
-        self._field(f, r, "timeout_script (s)", tarea.get("timeout_script", ""), f"{nombre}__timeout_script",  width=120); r += 1
-        self._field(f, r, "max_reintentos",     tarea.get("max_reintentos", ""), f"{nombre}__max_reintentos",  width=120); r += 1
-        self._info(f, r, "Vacio = usa el valor global. 1 = falla rapido y va al fallback."); r += 1
+        # ---- Planificacion ----
+        prog = tarea.get("programacion") or {}
+        if not prog and "intervalo" in tarea:
+            prog = {"tipo": "intervalo", "valor": int(tarea["intervalo"])}
+        tipo_inicial = prog.get("tipo", "intervalo")
+
+        ctk.CTkLabel(f, text="Tipo planificacion:", anchor="e", width=190,
+                     font=ctk.CTkFont(size=12)).grid(row=r, column=0, sticky="e", padx=(16, 8), pady=3)
+        tipo_box = ctk.CTkComboBox(f, values=["intervalo", "diario", "semanal"],
+                                   width=130, state="readonly")
+        tipo_box.set(tipo_inicial)
+        tipo_box.grid(row=r, column=1, sticky="w", pady=3)
+        self._widget_refs[f"{nombre}__prog_tipo"] = ("combo", tipo_box)
+        r += 1
+
+        dyn = ctk.CTkFrame(f, fg_color="transparent")
+        dyn.grid(row=r, column=0, columnspan=2, sticky="ew")
+        r += 1
+
+        _hora_init = prog.get("hora", "08:00")
+        _dias_init = prog.get("dias", [])
+        _val_init  = int(prog.get("valor", 60))
+        _refs      = self._widget_refs
+        _n         = nombre
+        DIAS       = ["lun", "mar", "mie", "jue", "vie", "sab", "dom"]
+        DIAS_LBL   = ["L",   "M",   "X",   "J",   "V",   "S",   "D"]
+        UNITS      = ["segundos", "minutos", "horas", "dias"]
+        MULT       = {"segundos": 1, "minutos": 60, "horas": 3600, "dias": 86400}
+
+        def _rebuild(*_):
+            for k in ([f"{_n}__prog_iv_val", f"{_n}__prog_iv_unit", f"{_n}__prog_hora"]
+                      + [f"{_n}__prog_dia_{d}" for d in DIAS]):
+                _refs.pop(k, None)
+            for w in dyn.winfo_children():
+                w.destroy()
+            dyn.columnconfigure(1, weight=1)
+
+            tipo = tipo_box.get()
+            if tipo == "intervalo":
+                v = _val_init
+                if v % 86400 == 0:  vd, ud = v // 86400, "dias"
+                elif v % 3600 == 0: vd, ud = v // 3600,  "horas"
+                elif v % 60 == 0:   vd, ud = v // 60,    "minutos"
+                else:               vd, ud = v,           "segundos"
+
+                ctk.CTkLabel(dyn, text="Cada:", anchor="e", width=190,
+                             font=ctk.CTkFont(size=12)).grid(
+                    row=0, column=0, sticky="e", padx=(16, 8), pady=3)
+                inner = ctk.CTkFrame(dyn, fg_color="transparent")
+                inner.grid(row=0, column=1, sticky="w", pady=3)
+
+                iv_e = ctk.CTkEntry(inner, width=70)
+                iv_e.insert(0, str(vd))
+                iv_e.pack(side="left", padx=(0, 4))
+                _refs[f"{_n}__prog_iv_val"] = ("entry", iv_e)
+
+                iv_u = ctk.CTkComboBox(inner, values=UNITS, width=110, state="readonly")
+                iv_u.set(ud)
+                iv_u.pack(side="left")
+                _refs[f"{_n}__prog_iv_unit"] = ("combo", iv_u)
+
+            else:
+                ctk.CTkLabel(dyn, text="Hora (HH:MM):", anchor="e", width=190,
+                             font=ctk.CTkFont(size=12)).grid(
+                    row=0, column=0, sticky="e", padx=(16, 8), pady=3)
+                hora_e = ctk.CTkEntry(dyn, width=80, placeholder_text="08:00")
+                hora_e.insert(0, _hora_init)
+                hora_e.grid(row=0, column=1, sticky="w", pady=3)
+                _refs[f"{_n}__prog_hora"] = ("entry", hora_e)
+
+                if tipo == "semanal":
+                    ctk.CTkLabel(dyn, text="Dias:", anchor="e", width=190,
+                                 font=ctk.CTkFont(size=12)).grid(
+                        row=1, column=0, sticky="e", padx=(16, 8), pady=3)
+                    dias_inner = ctk.CTkFrame(dyn, fg_color="transparent")
+                    dias_inner.grid(row=1, column=1, sticky="w", pady=3)
+                    for d, dl in zip(DIAS, DIAS_LBL):
+                        var = ctk.BooleanVar(value=d in _dias_init)
+                        cb  = ctk.CTkCheckBox(dias_inner, text=dl, variable=var,
+                                              width=42, checkbox_width=16, checkbox_height=16)
+                        cb.pack(side="left", padx=2)
+                        _refs[f"{_n}__prog_dia_{d}"] = ("checkbox", cb)
+
+        tipo_box.configure(command=_rebuild)
+        _rebuild()
+
+        self._field_desc(f, r, "Timeout IA (s)",     tarea.get("timeout_ollama", ""), f"{nombre}__timeout_ollama", desc="Segundos maximos para que el modelo genere el script"); r += 1
+        self._field_desc(f, r, "Timeout script (s)", tarea.get("timeout_script", ""), f"{nombre}__timeout_script", desc="Segundos maximos de ejecucion del script generado");      r += 1
+        self._field_desc(f, r, "Reintentos",         tarea.get("max_reintentos", ""), f"{nombre}__max_reintentos", desc="Intentos antes de usar el modelo de reserva");            r += 1
+        self._info(f, r, "Vacio = usa el valor global de config.yaml"); r += 1
 
         pv = tarea.get("prompt_verificador")
-        self._textbox_full(f, r, "prompt_verificador:", pv if pv else [],
-                           f"{nombre}__pv", height=70); r += 2
+        self._textbox_full(f, r, "Verificador  (opcional — criterio extra para validar el resultado):",
+                           pv if pv else [], f"{nombre}__pv", height=70); r += 2
 
         self._sec_header(f, r, "Prompt (una linea = un item)", _C["tarea"]); r += 1
         self._textbox_full(f, r, "Lineas:", tarea.get("prompt", []),
@@ -624,10 +969,23 @@ class YamlEditorView(ctk.CTkFrame):
                 self._data["tareas"] = {}
             tarea = dict(self._data["tareas"].get(nombre, {}))
 
-            v = self._val(f"{nombre}__intervalo")
-            if v:
-                try: tarea["intervalo"] = int(v)
-                except ValueError: pass
+            tipo = self._val(f"{nombre}__prog_tipo") or "intervalo"
+            prog: dict = {"tipo": tipo}
+            if tipo == "intervalo":
+                val_s = self._val(f"{nombre}__prog_iv_val") or "60"
+                unit  = self._val(f"{nombre}__prog_iv_unit") or "segundos"
+                mult  = {"segundos": 1, "minutos": 60, "horas": 3600, "dias": 86400}
+                try:
+                    prog["valor"] = int(val_s) * mult.get(unit, 1)
+                except ValueError:
+                    prog["valor"] = 60
+            elif tipo in ("diario", "semanal"):
+                prog["hora"] = self._val(f"{nombre}__prog_hora") or "08:00"
+                if tipo == "semanal":
+                    _dias = ["lun", "mar", "mie", "jue", "vie", "sab", "dom"]
+                    prog["dias"] = [d for d in _dias if self._val(f"{nombre}__prog_dia_{d}")]
+            tarea["programacion"] = prog
+            tarea.pop("intervalo", None)
 
             for campo in ["timeout_ollama", "timeout_script", "max_reintentos"]:
                 v = self._val(f"{nombre}__{campo}")
@@ -780,6 +1138,7 @@ class YamlEditorView(ctk.CTkFrame):
             self._current_section = None
             self._widget_refs = {}
             win.destroy()
+            self.guardar()
             self._rebuild_nav()
             self._clear_form()
 
