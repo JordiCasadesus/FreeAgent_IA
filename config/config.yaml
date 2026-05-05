@@ -1,6 +1,6 @@
 # powerbot:config
-modelo: gemma2:9b
-modelo_fallback: ministral-3:14b
+modelo: ""
+modelo_fallback: ""
 api_key: ''
 telegram_token: TU_TOKEN_DEL_BOT_DE_TELEGRAM
 telegram_chat_id: TU_CHAT_ID_DE_TELEGRAM

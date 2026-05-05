@@ -304,15 +304,19 @@ class DashboardView(ctk.CTkScrollableFrame):
         return result
 
     def _leer_intervalos(self) -> dict:
-        """Devuelve {nombre_tarea: intervalo_segundos}."""
+        """Devuelve {nombre_tarea: intervalo_segundos} para tareas de tipo intervalo."""
         try:
             import yaml
             with open(self.app.TAREAS_PATH, "r", encoding="utf-8") as f:
                 raw = yaml.safe_load(f)
-            return {
-                nombre: int(t.get("intervalo", 0))
-                for nombre, t in raw.get("tareas", {}).items()
-            }
+            result = {}
+            for nombre, t in raw.get("tareas", {}).items():
+                prog = t.get("programacion")
+                if prog and prog.get("tipo") == "intervalo":
+                    result[nombre] = int(prog.get("valor", 0))
+                elif "intervalo" in t:
+                    result[nombre] = int(t["intervalo"])
+            return result
         except Exception:
             return {}
 

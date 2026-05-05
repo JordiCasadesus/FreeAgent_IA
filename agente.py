@@ -236,6 +236,7 @@ def main():
 
     ruta_cache = os.path.join(SCRIPT_DIR, "scripts_cache")
     os.makedirs(ruta_cache, exist_ok=True)
+    os.makedirs(STATE_DIR, exist_ok=True)
 
     # Limpiar log al inicio
     if os.path.exists(log_path):
