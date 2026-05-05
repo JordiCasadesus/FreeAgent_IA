@@ -1,6 +1,7 @@
 # FreeAgent_IA
+Estaba jugando un poco y he creado este Agente sencillo de automatización con IA que genera y ejecuta scripts Python de forma autónoma, con notificaciones via Telegram.
 
-Agente de automatización con IA que genera y ejecuta scripts Python de forma autónoma, con notificaciones via Telegram.
+La idea es que el uso de las IA's sean gratuitos, por esto la importancia de ollama local.
 
 Describe en lenguaje natural lo que quieres que haga cada tarea. El agente llama al modelo de IA, genera el script Python, lo ejecuta, verifica el resultado y lo reintenta si falla — sin intervención manual.
 
@@ -8,7 +9,7 @@ Describe en lenguaje natural lo que quieres que haga cada tarea. El agente llama
 
 - Python 3.10+
 - [Ollama](https://ollama.com/download) instalado y en ejecución — opcional si solo usas Google AI Studio
-- API key de [Google AI Studio](https://aistudio.google.com) — opcional si solo usas Ollama
+- API key de [Google AI Studio](https://aistudio.google.com) recomiendo de AI Studio el gemma-3-27b-it, con RPM, TPM y RPD amplios  — opcional si solo usas Ollama
 - Bot de Telegram con token y chat_id — opcional
 
 ## Instalación
