@@ -591,7 +591,18 @@ def main():
                                 timeout_segundos=timeout_ollama, opciones=opciones,
                             )
                         if gen is None:
-                            escribir_log("No se genero correccion. Abandonando tarea.", log_path)
+                            escribir_log(
+                                f"[{nombre_tarea}] Correccion fallida. "
+                                f"Regenerando desde prompt original (intento {intento}/{max_reintentos})...",
+                                log_path)
+                            gen = generar_script(
+                                modelo=modelo, prompt=prompt_completo,
+                                log_path=log_path, api_key=api_key,
+                                log_prompt=log_prompt, log_respuesta=log_respuesta,
+                                timeout_segundos=timeout_ollama, opciones=opciones,
+                            )
+                        if gen is None:
+                            escribir_log("No se genero script. Abandonando tarea.", log_path)
                             break
                         script_actual     = gen["script"]
                         mensajes_actuales = gen["mensajes"]
