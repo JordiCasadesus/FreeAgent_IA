@@ -95,7 +95,7 @@ class CacheManagerView(ctk.CTkFrame):
         self._btn_copiar.pack(side="left", padx=(0, 8))
 
         self._btn_reemplazar = ctk.CTkButton(
-            acciones, text="✏ Reemplazar script", width=160,
+            acciones, text="✏ Editar script", width=160,
             fg_color="#5a3a1a", hover_color="#8b5a20", state="disabled",
             command=self._reemplazar_script,
         )
@@ -291,7 +291,7 @@ class CacheManagerView(ctk.CTkFrame):
             return
 
         win = ctk.CTkToplevel(self)
-        win.title("Reemplazar script")
+        win.title("Editar script")
         win.geometry("820x580")
         win.minsize(600, 400)
         win.grab_set()
