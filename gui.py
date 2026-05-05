@@ -37,7 +37,7 @@ ICONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "imagenes",
 
 NAV_ITEMS = [
     ("Dashboard", "dashboard", "#1f6aa5", "Monitor.png"),
-    ("Log",       "log",       "#2a8a5a", "List.png"),
+    ("Resultados", "log",       "#2a8a5a", "List.png"),
     ("Config",    "config",    "#c47a1a", "Settings.png"),
     ("Tareas",    "tareas",    "#7a3aaa", "To do list.png"),
     ("Cache",     "cache",     "#1a7a8a", "Save data.png"),
