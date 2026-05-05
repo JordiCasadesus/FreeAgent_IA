@@ -235,11 +235,32 @@ class App(ctk.CTk):
     def iniciar_agente(self):
         if self.agent_process and self.agent_process.poll() is None:
             return
+        error = self._validar_config_inicio()
+        if error:
+            from tkinter import messagebox
+            messagebox.showerror("No se puede iniciar el agente", error)
+            return
         self.agent_process = subprocess.Popen(
             [sys.executable, AGENTE_PY],
             cwd=SCRIPT_DIR,
         )
         self._update_status_label()
+
+    def _validar_config_inicio(self) -> str:
+        try:
+            import yaml
+            with open(self._views["config"]._path, "r", encoding="utf-8") as f:
+                cfg = yaml.safe_load(f) or {}
+            with open(self._views["tareas"]._path, "r", encoding="utf-8") as f:
+                tar = yaml.safe_load(f) or {}
+        except Exception as e:
+            return f"No se pudo leer la configuración:\n{e}"
+
+        if not cfg.get("modelo", "").strip():
+            return "Falta el modelo principal.\nConfigúralo en Config → Modelo principal."
+        if not tar.get("tareas"):
+            return "No hay tareas definidas en tareas.yaml."
+        return ""
 
     def detener_agente(self):
         if self.agent_process and self.agent_process.poll() is None:
