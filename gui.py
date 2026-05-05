@@ -221,6 +221,8 @@ class App(ctk.CTk):
             self._views[self._current_view].pack_forget()
         self._views[key].pack(fill="both", expand=True, padx=0, pady=0)
         self._current_view = key
+        if key == "cache":
+            self._views["cache"].actualizar()
         for k, (row, btn) in self._nav_buttons.items():
             active = k == key
             row.configure(fg_color=COLOR_ACTIVE if active else COLOR_INACTIVE)
